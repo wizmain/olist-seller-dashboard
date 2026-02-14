@@ -44,6 +44,9 @@ def generate_all_advice(metrics: SellerMetrics) -> list[ConsultingAdvice]:
     advices.extend(_rule_price_optimization(metrics))
     advices.extend(_rule_delivery_warning(metrics))
     advices.extend(_rule_low_review_diagnosis(metrics))
+    advices.extend(_rule_cancel_rate(metrics))
+    advices.extend(_rule_repeat_customer(metrics))
+    advices.extend(_rule_review_keyword_insight(metrics))
 
     # 우선순위 정렬
     priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -407,6 +410,123 @@ def _rule_low_review_diagnosis(m: SellerMetrics) -> list[ConsultingAdvice]:
             description=desc,
             actions=actions,
             expected_effect="저평가 비율 절반 감소 시 평균 리뷰 0.5-1.0점 개선",
+        )
+    ]
+
+
+def _rule_cancel_rate(m: SellerMetrics) -> list[ConsultingAdvice]:
+    """규칙 11: 취소율 높음 (>2%)."""
+    if m.cancel_rate <= 0.02:
+        return []
+    return [
+        ConsultingAdvice(
+            title="주문 취소율 관리 필요",
+            category="delivery",
+            priority="high" if m.cancel_rate > 0.05 else "medium",
+            current_value=f"{m.cancel_rate:.1%} ({m.cancel_count}건)",
+            target_value="2% 이하",
+            description=(
+                f"주문 취소/미배송 비율이 {m.cancel_rate:.1%}로 높습니다. "
+                "취소율이 높으면 플랫폼 내 셀러 평판에 부정적 영향을 미치고, "
+                "노출 순위 하락으로 이어질 수 있습니다."
+            ),
+            actions=[
+                "재고 관리 시스템 점검 — 품절 상품 즉시 비활성화",
+                "주문 접수 후 24시간 내 발송 프로세스 확립",
+                "취소 사유 분석 (재고 부족 vs 고객 변심 vs 배송 문제)",
+                "자동 재고 알림 설정으로 품절 방지",
+            ],
+            expected_effect="취소율 절반 감소 시 플랫폼 노출도 향상, 전환율 개선",
+        )
+    ]
+
+
+def _rule_repeat_customer(m: SellerMetrics) -> list[ConsultingAdvice]:
+    """규칙 12: 재구매율 낮음."""
+    if m.unique_customers < 10 or m.repeat_customer_rate >= 0.03:
+        return []
+    return [
+        ConsultingAdvice(
+            title="재구매 고객 확보 전략 필요",
+            category="growth",
+            priority="medium",
+            current_value=f"{m.repeat_customer_rate:.1%} ({m.repeat_customer_count}명)",
+            target_value="3% 이상",
+            description=(
+                f"재구매 고객 비율이 {m.repeat_customer_rate:.1%}로 낮습니다. "
+                "신규 고객 획득 비용은 기존 고객 유지 비용의 5-7배입니다. "
+                "재구매율 향상은 안정적 매출 성장의 핵심입니다."
+            ),
+            actions=[
+                "포장에 브랜드 카드/쿠폰 동봉으로 재구매 유도",
+                "상품 번들/세트 구성으로 추가 구매 촉진",
+                "베스트셀러 상품군 확대로 고객 재방문 유도",
+                "배송 품질 개선으로 고객 만족도 향상",
+            ],
+            expected_effect="재구매율 1%p 향상 시 매출 안정성 대폭 개선",
+        )
+    ]
+
+
+def _rule_review_keyword_insight(m: SellerMetrics) -> list[ConsultingAdvice]:
+    """규칙 13: 리뷰 키워드 기반 구체적 개선 조언."""
+    rka = m.review_keyword_analysis
+    if not rka or not rka.get("issue_counts"):
+        return []
+
+    primary = rka.get("primary_issue")
+    if not primary:
+        return []
+
+    analyzed = rka.get("analyzed_count", 0)
+    if analyzed == 0:
+        return []
+
+    issue_count = rka["issue_counts"].get(primary, 0)
+    pct = issue_count / analyzed
+
+    # 주요 이슈가 리뷰의 20% 이상일 때만
+    if pct < 0.20:
+        return []
+
+    actions_map = {
+        "배송 지연": [
+            "예상 배송일을 보수적으로 재설정 (실제 배송일 + 3일)",
+            "발송 지연 시 고객에게 선제적 메시지 발송",
+            "고객 밀집 지역 근처 물류 거점 활용",
+        ],
+        "상품 품질": [
+            "반복 불만 상품 품질 검수 강화",
+            "공급처 변경 또는 품질 기준 재협의",
+            "불량률 높은 상품 리스트업 및 개선/제거",
+        ],
+        "포장 문제": [
+            "파손 방지 포장재 업그레이드 (에어캡, 완충재)",
+            "깨지기 쉬운 상품 별도 포장 프로세스 도입",
+            "포장 가이드라인 수립 및 준수",
+        ],
+        "기대 불일치": [
+            "상품 설명/사이즈/색상 정보 정확도 재점검",
+            "실제 사진 위주로 상품 이미지 교체",
+            "상품 상세페이지에 실측 사진 및 비교 이미지 추가",
+        ],
+    }
+
+    return [
+        ConsultingAdvice(
+            title=f"리뷰 분석: '{primary}' 이슈 집중 개선",
+            category="review",
+            priority="high",
+            current_value=f"텍스트 리뷰 {analyzed}건 중 {issue_count}건 ({pct:.0%})",
+            target_value=f"{primary} 관련 불만 50% 감소",
+            description=(
+                f"리뷰 텍스트 분석 결과, **{primary}**이 가장 빈번한 "
+                f"이슈로 나타났습니다 ({issue_count}건, {pct:.0%}). "
+                "이 이슈를 집중 개선하면 리뷰 점수와 고객 만족도를 "
+                "효과적으로 높일 수 있습니다."
+            ),
+            actions=actions_map.get(primary, ["해당 이슈의 근본 원인 분석 및 개선"]),
+            expected_effect=f"{primary} 이슈 절반 감소 시 리뷰 0.3-0.5점 개선 기대",
         )
     ]
 

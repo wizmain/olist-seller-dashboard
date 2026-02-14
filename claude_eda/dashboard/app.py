@@ -50,30 +50,39 @@ with st.sidebar:
 
     st.markdown("**또는** 매출 상위 셀러 선택:")
 
-    # 매출 상위 셀러 selectbox — seller_id를 직접 매핑
+    # 매출 상위 셀러 selectbox — format_func으로 표시
     seller_list = get_seller_list()
     top50 = seller_list.head(50)
-    option_to_id: dict[str, str] = {}
-    display_options = ["(선택하세요)"]
+
+    # seller_id 리스트 (None = 미선택)
+    seller_id_options = [""] + top50["seller_id"].tolist()
+    # 라벨 매핑 딕셔너리 (한 번만 생성)
+    _label_cache = {}
     for _, r in top50.iterrows():
-        label = (
+        _label_cache[r["seller_id"]] = (
             f"#{int(r['rank'])} | {r['seller_id'][:12]}... | "
             f"{fmt_currency_short(r['total_revenue'])} | "
             f"{SELLER_CLUSTER_SHORT.get(int(r['cluster']), '?')}"
         )
-        display_options.append(label)
-        option_to_id[label] = r["seller_id"]
 
-    selected_option = st.selectbox(
-        "매출 상위 50 셀러", display_options, key="seller_select"
+    def _format_seller(sid: str) -> str:
+        if not sid:
+            return "(선택하세요)"
+        return _label_cache.get(sid, sid[:12])
+
+    selected_from_list = st.selectbox(
+        "매출 상위 50 셀러",
+        seller_id_options,
+        format_func=_format_seller,
+        key="seller_select",
     )
 
-    # 선택된 셀러 ID 결정
+    # 선택된 셀러 ID 결정 (텍스트 입력 우선)
     selected_seller_id = None
     if seller_id_input and len(seller_id_input) == 32:
         selected_seller_id = seller_id_input
-    elif selected_option in option_to_id:
-        selected_seller_id = option_to_id[selected_option]
+    elif selected_from_list:
+        selected_seller_id = selected_from_list
 
     st.divider()
     st.caption("Olist 셀러 컨설팅 시스템 v1.0")

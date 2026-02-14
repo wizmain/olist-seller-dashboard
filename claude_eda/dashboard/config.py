@@ -14,6 +14,7 @@ SELLERS_PATH = RAW_DATA_DIR / "olist_sellers_dataset.csv"
 PRODUCTS_PATH = RAW_DATA_DIR / "olist_products_dataset.csv"
 CUSTOMERS_PATH = RAW_DATA_DIR / "olist_customers_dataset.csv"
 PAYMENTS_PATH = RAW_DATA_DIR / "olist_order_payments_dataset.csv"
+GEOLOCATION_PATH = RAW_DATA_DIR / "olist_geolocation_dataset.csv"
 CATEGORY_TRANSLATION_PATH = RAW_DATA_DIR / "product_category_name_translation.csv"
 
 # 클러스터 분석 결과 경로

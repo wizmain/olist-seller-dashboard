@@ -11,11 +11,17 @@ import streamlit as st
 from claude_eda.dashboard.data.loader import (
     build_merged_table,
     load_customer_clusters,
+    load_geolocation,
+    load_order_items,
+    load_orders,
+    load_payments,
     load_product_clusters,
+    load_reviews,
     load_seller_cluster_stats,
     load_seller_clusters,
     load_sellers,
 )
+from claude_eda.dashboard.engine.review_analyzer import analyze_seller_reviews
 
 
 @dataclass
@@ -70,6 +76,31 @@ class SellerMetrics:
 
     # 상품 사진 정보
     avg_photos: float = 0.0
+
+    # ===== 신규 메트릭 =====
+
+    # 1. 리뷰 텍스트 키워드 분석
+    review_keyword_analysis: dict = field(default_factory=dict)
+
+    # 2. 카테고리 내 순위
+    category_ranks: pd.DataFrame = field(default_factory=pd.DataFrame)
+
+    # 3. 셀러-고객 거리 기반 배송 분석
+    avg_distance_km: float = 0.0
+    distance_delivery: pd.DataFrame = field(default_factory=pd.DataFrame)
+
+    # 4. 결제 패턴
+    payment_type_dist: pd.DataFrame = field(default_factory=pd.DataFrame)
+    avg_installments: float = 0.0
+    credit_card_pct: float = 0.0
+
+    # 5. 취소율
+    cancel_rate: float = 0.0
+    cancel_count: int = 0
+
+    # 6. 재구매 고객 비율
+    repeat_customer_rate: float = 0.0
+    repeat_customer_count: int = 0
 
 
 @st.cache_data
@@ -209,7 +240,202 @@ def compute_seller_metrics(seller_id: str) -> SellerMetrics | None:
     # --- 퍼센타일 ---
     m.percentiles = compute_percentile_ranks(seller_id)
 
+    # ===== 신규 6개 메트릭 =====
+
+    # 1. 리뷰 텍스트 키워드 분석
+    review_text_df = seller_data[["review_score", "review_comment_message"]].dropna(
+        subset=["review_score"]
+    )
+    m.review_keyword_analysis = analyze_seller_reviews(review_text_df)
+
+    # 2. 카테고리 내 순위
+    m.category_ranks = _compute_category_ranks(seller_id, seller_data, merged)
+
+    # 3. 셀러-고객 거리 기반 배송 분석
+    m.avg_distance_km, m.distance_delivery = _compute_distance_analysis(
+        seller_id, seller_data, delivered
+    )
+
+    # 4. 결제 패턴
+    _compute_payment_patterns(m, seller_data)
+
+    # 5. 취소율
+    _compute_cancel_rate(m, seller_data)
+
+    # 6. 재구매 고객 비율
+    _compute_repeat_customers(m, seller_data)
+
     return m
+
+
+def _compute_category_ranks(
+    seller_id: str, seller_data: pd.DataFrame, merged: pd.DataFrame
+) -> pd.DataFrame:
+    """같은 카테고리 내 셀러 순위 (매출, 리뷰, 배송)."""
+    seller_cats = seller_data["product_category_name_english"].dropna().unique()
+    if len(seller_cats) == 0:
+        return pd.DataFrame()
+
+    # 주요 카테고리 (매출 기준 상위 3개)
+    cat_revenue = (
+        seller_data.groupby("product_category_name_english")["price"]
+        .sum()
+        .sort_values(ascending=False)
+    )
+    top_cats = cat_revenue.head(3).index.tolist()
+
+    rows = []
+    for cat in top_cats:
+        cat_data = merged[merged["product_category_name_english"] == cat]
+        # 카테고리 내 셀러별 집계
+        cat_sellers = cat_data.groupby("seller_id").agg(
+            revenue=("price", "sum"),
+            orders=("order_id", "nunique"),
+            avg_review=("review_score", "mean"),
+        )
+        total_sellers = len(cat_sellers)
+        if seller_id not in cat_sellers.index:
+            continue
+
+        rev_rank = int((cat_sellers["revenue"] >= cat_sellers.loc[seller_id, "revenue"]).sum())
+        review_rank = int((cat_sellers["avg_review"] >= cat_sellers.loc[seller_id, "avg_review"]).sum())
+
+        rows.append({
+            "category": cat,
+            "total_sellers": total_sellers,
+            "revenue_rank": rev_rank,
+            "review_rank": review_rank,
+            "my_revenue": cat_sellers.loc[seller_id, "revenue"],
+            "my_review": cat_sellers.loc[seller_id, "avg_review"],
+        })
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def _haversine(lat1, lon1, lat2, lon2):
+    """두 좌표 간 거리 (km)."""
+    R = 6371
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+    return R * 2 * np.arcsin(np.sqrt(a))
+
+
+def _compute_distance_analysis(
+    seller_id: str, seller_data: pd.DataFrame, delivered: pd.DataFrame
+) -> tuple[float, pd.DataFrame]:
+    """셀러-고객 거리 기반 배송 분석."""
+    geo = load_geolocation()
+    sellers_df = load_sellers()
+
+    seller_info = sellers_df[sellers_df["seller_id"] == seller_id]
+    if seller_info.empty:
+        return 0.0, pd.DataFrame()
+
+    seller_zip = seller_info.iloc[0]["seller_zip_code_prefix"]
+    seller_geo = geo[geo["geolocation_zip_code_prefix"] == seller_zip]
+    if seller_geo.empty:
+        return 0.0, pd.DataFrame()
+
+    slat = float(seller_geo.iloc[0]["geolocation_lat"])
+    slng = float(seller_geo.iloc[0]["geolocation_lng"])
+
+    # 고객 zip → 위경도
+    cust_zips = delivered[["customer_zip_code_prefix", "delivery_days"]].dropna()
+    if cust_zips.empty:
+        return 0.0, pd.DataFrame()
+
+    cust_zips = cust_zips.copy()
+    cust_zips["customer_zip_code_prefix"] = cust_zips[
+        "customer_zip_code_prefix"
+    ].astype(int, errors="ignore")
+
+    merged_geo = cust_zips.merge(
+        geo,
+        left_on="customer_zip_code_prefix",
+        right_on="geolocation_zip_code_prefix",
+        how="inner",
+    )
+    if merged_geo.empty:
+        return 0.0, pd.DataFrame()
+
+    merged_geo["distance_km"] = _haversine(
+        slat, slng,
+        merged_geo["geolocation_lat"].values,
+        merged_geo["geolocation_lng"].values,
+    )
+
+    avg_dist = float(merged_geo["distance_km"].mean())
+
+    # 거리 구간별 배송일
+    bins = [0, 200, 500, 1000, 2000, 10000]
+    labels = ["0-200km", "200-500km", "500-1000km", "1000-2000km", "2000km+"]
+    merged_geo["dist_bin"] = pd.cut(merged_geo["distance_km"], bins=bins, labels=labels)
+    dist_delivery = (
+        merged_geo.groupby("dist_bin", observed=True)
+        .agg(
+            avg_days=("delivery_days", "mean"),
+            count=("delivery_days", "count"),
+        )
+        .reset_index()
+    )
+
+    return avg_dist, dist_delivery
+
+
+def _compute_payment_patterns(m: SellerMetrics, seller_data: pd.DataFrame) -> None:
+    """결제 수단 분포 및 할부 패턴."""
+    payments = load_payments()
+    seller_orders = seller_data["order_id"].unique()
+    seller_payments = payments[payments["order_id"].isin(seller_orders)]
+
+    if seller_payments.empty:
+        return
+
+    # 결제 수단 분포
+    pay_dist = seller_payments["payment_type"].value_counts().reset_index()
+    pay_dist.columns = ["payment_type", "count"]
+    m.payment_type_dist = pay_dist
+
+    # 평균 할부 (신용카드만)
+    credit = seller_payments[seller_payments["payment_type"] == "credit_card"]
+    if not credit.empty:
+        m.avg_installments = float(credit["payment_installments"].mean())
+
+    # 신용카드 비율
+    total_pay = len(seller_payments)
+    m.credit_card_pct = len(credit) / total_pay if total_pay > 0 else 0.0
+
+
+def _compute_cancel_rate(m: SellerMetrics, seller_data: pd.DataFrame) -> None:
+    """주문 취소/미배송 비율."""
+    order_statuses = seller_data.drop_duplicates("order_id")["order_status"]
+    total = len(order_statuses)
+    if total == 0:
+        return
+
+    cancel_statuses = ["canceled", "unavailable"]
+    canceled = order_statuses.isin(cancel_statuses).sum()
+    m.cancel_count = int(canceled)
+    m.cancel_rate = canceled / total
+
+
+def _compute_repeat_customers(m: SellerMetrics, seller_data: pd.DataFrame) -> None:
+    """재구매 고객 비율."""
+    cust_orders = (
+        seller_data.groupby("customer_unique_id")["order_id"]
+        .nunique()
+        .reset_index()
+    )
+    cust_orders.columns = ["customer_unique_id", "order_count"]
+    total_custs = len(cust_orders)
+    if total_custs == 0:
+        return
+
+    repeats = (cust_orders["order_count"] > 1).sum()
+    m.repeat_customer_count = int(repeats)
+    m.repeat_customer_rate = repeats / total_custs
 
 
 @st.cache_data
@@ -230,7 +456,6 @@ def compute_percentile_ranks(seller_id: str) -> dict:
         "unique_customers",
         "items_per_order",
     ]
-    # 낮을수록 좋은 지표
     lower_better = ["low_review_pct", "avg_delivery_days", "late_delivery_pct"]
 
     percentiles = {}

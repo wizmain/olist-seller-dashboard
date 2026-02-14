@@ -7,6 +7,7 @@ from claude_eda.dashboard.config import (
     CATEGORY_TRANSLATION_PATH,
     CUSTOMER_CLUSTER_DATA_PATH,
     CUSTOMERS_PATH,
+    GEOLOCATION_PATH,
     ORDER_ITEMS_PATH,
     ORDERS_PATH,
     PAYMENTS_PATH,
@@ -71,6 +72,17 @@ def load_category_translation() -> pd.DataFrame:
 
 
 @st.cache_data
+def load_geolocation() -> pd.DataFrame:
+    """zip_code_prefix별 대표 위경도 (중복 제거, 첫 번째 값 사용)."""
+    df = pd.read_csv(GEOLOCATION_PATH)
+    return (
+        df.groupby("geolocation_zip_code_prefix")
+        .agg({"geolocation_lat": "first", "geolocation_lng": "first"})
+        .reset_index()
+    )
+
+
+@st.cache_data
 def load_seller_clusters() -> pd.DataFrame:
     return pd.read_csv(SELLER_CLUSTER_DATA_PATH)
 
@@ -111,8 +123,9 @@ def build_merged_table() -> pd.DataFrame:
 
     # 조인
     merged = items.merge(orders, on="order_id", how="left")
+    review_cols = ["order_id", "review_score", "review_comment_message"]
     merged = merged.merge(
-        reviews[["order_id", "review_score"]].drop_duplicates("order_id"),
+        reviews[review_cols].drop_duplicates("order_id"),
         on="order_id",
         how="left",
     )

@@ -104,7 +104,14 @@ def render_consulting(metrics: SellerMetrics) -> None:
 
     st.divider()
 
-    # === 섹션 5: 유사 셀러 비교 ===
+    # === 섹션 5: 리뷰 원인 심층 분석 ===
+    rka = metrics.review_keyword_analysis
+    if rka and rka.get("analyzed_count", 0) > 0 and rka.get("issue_counts"):
+        st.markdown("## 리뷰 이슈 심층 분석")
+        _render_review_deep_analysis(metrics)
+        st.divider()
+
+    # === 섹션 6: 유사 셀러 비교 ===
     st.markdown("## 유사 셀러 비교 (같은 클러스터)")
     _render_cluster_comparison(metrics)
 
@@ -158,3 +165,50 @@ def _render_cluster_comparison(metrics: SellerMetrics) -> None:
     import pandas as pd
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _render_review_deep_analysis(metrics: SellerMetrics) -> None:
+    """리뷰 텍스트 키워드 기반 원인 심층 분석."""
+    rka = metrics.review_keyword_analysis
+    issue_counts = rka.get("issue_counts", {})
+    examples = rka.get("examples", {})
+    primary = rka.get("primary_issue")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 이슈 카테고리별 분포")
+        from claude_eda.dashboard.components.charts import review_keyword_bar
+        st.plotly_chart(
+            review_keyword_bar(issue_counts, rka["analyzed_count"]),
+            use_container_width=True,
+        )
+
+    with col2:
+        st.markdown("#### 핵심 인사이트")
+        if primary:
+            st.error(f"가장 빈번한 이슈: **{primary}** ({issue_counts.get(primary, 0)}건)")
+        analyzed = rka["analyzed_count"]
+        pos_count = rka.get("positive_count", 0)
+        neg_issues = rka.get("negative_issues", {})
+
+        st.markdown(
+            f"- 분석 대상 텍스트 리뷰: **{analyzed}건** "
+            f"(전체 {rka.get('total_count', 0)}건 중)\n"
+            f"- 긍정 키워드 포함 리뷰: **{pos_count}건** ({pos_count / analyzed:.0%})\n"
+            f"- 이슈 키워드 포함 리뷰: **{sum(issue_counts.values())}건**"
+        )
+
+        if neg_issues:
+            st.markdown("**저평가(1-2점) 리뷰의 이슈 분포:**")
+            for cat, cnt in sorted(neg_issues.items(), key=lambda x: x[1], reverse=True):
+                st.markdown(f"  - {cat}: {cnt}건")
+
+    # 예시 리뷰
+    if examples:
+        with st.expander("이슈 카테고리별 리뷰 예시", expanded=False):
+            for cat, exs in examples.items():
+                st.markdown(f"**{cat}:**")
+                for ex in exs:
+                    st.caption(f"> {ex}")
+                st.write("")

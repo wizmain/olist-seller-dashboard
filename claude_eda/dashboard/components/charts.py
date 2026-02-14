@@ -351,6 +351,133 @@ def health_breakdown_bar(dimension_scores: dict[str, float]) -> go.Figure:
     return fig
 
 
+def review_keyword_bar(issue_counts: dict, analyzed_count: int) -> go.Figure:
+    """리뷰 키워드 분석 — 이슈 카테고리별 바 차트."""
+    if not issue_counts:
+        return _empty_chart("텍스트 리뷰 데이터 없음")
+
+    categories = list(issue_counts.keys())
+    counts = list(issue_counts.values())
+    color_map = {
+        "배송 지연": COLORS["warning"],
+        "상품 품질": COLORS["danger"],
+        "포장 문제": "#9467bd",
+        "기대 불일치": COLORS["info"],
+    }
+    colors = [color_map.get(c, COLORS["primary"]) for c in categories]
+
+    fig = go.Figure(
+        go.Bar(
+            x=counts,
+            y=categories,
+            orientation="h",
+            marker_color=colors,
+            text=[f"{c}건 ({c/analyzed_count:.0%})" if analyzed_count > 0 else f"{c}건"
+                  for c in counts],
+            textposition="outside",
+        )
+    )
+    fig.update_layout(
+        title=f"리뷰 이슈 키워드 분석 (텍스트 리뷰 {analyzed_count}건 중)",
+        xaxis=dict(title="건수"),
+        height=300,
+        margin=dict(t=60, b=40, l=100),
+    )
+    return fig
+
+
+def category_rank_table(category_ranks) -> go.Figure:
+    """카테고리 내 순위 테이블 차트."""
+    if category_ranks is None or category_ranks.empty:
+        return _empty_chart("카테고리 순위 데이터 없음")
+
+    fig = go.Figure(
+        go.Table(
+            header=dict(
+                values=["카테고리", "셀러 수", "매출 순위", "리뷰 순위", "내 매출(R$)", "내 리뷰"],
+                fill_color=COLORS["primary"],
+                font=dict(color="white", size=12),
+                align="center",
+            ),
+            cells=dict(
+                values=[
+                    category_ranks["category"],
+                    category_ranks["total_sellers"],
+                    [f"{r}위" for r in category_ranks["revenue_rank"]],
+                    [f"{r}위" for r in category_ranks["review_rank"]],
+                    [f"R${v:,.0f}" for v in category_ranks["my_revenue"]],
+                    [f"{v:.1f}" for v in category_ranks["my_review"]],
+                ],
+                fill_color="white",
+                align="center",
+                font=dict(size=11),
+            ),
+        )
+    )
+    fig.update_layout(
+        title="카테고리 내 경쟁 순위",
+        height=250,
+        margin=dict(t=60, b=20),
+    )
+    return fig
+
+
+def distance_delivery_bar(distance_delivery) -> go.Figure:
+    """거리 구간별 평균 배송일 바 차트."""
+    if distance_delivery is None or distance_delivery.empty:
+        return _empty_chart("거리 데이터 없음")
+
+    fig = go.Figure(
+        go.Bar(
+            x=distance_delivery["dist_bin"].astype(str),
+            y=distance_delivery["avg_days"],
+            marker_color=COLORS["primary"],
+            text=[f"{d:.1f}일\n({c}건)"
+                  for d, c in zip(distance_delivery["avg_days"], distance_delivery["count"])],
+            textposition="outside",
+        )
+    )
+    fig.update_layout(
+        title="거리별 평균 배송일",
+        xaxis=dict(title="셀러-고객 거리"),
+        yaxis=dict(title="평균 배송일"),
+        height=350,
+        margin=dict(t=60, b=40),
+    )
+    return fig
+
+
+def payment_donut(payment_type_dist) -> go.Figure:
+    """결제 수단 분포 도넛 차트."""
+    if payment_type_dist is None or payment_type_dist.empty:
+        return _empty_chart("결제 데이터 없음")
+
+    label_map = {
+        "credit_card": "신용카드",
+        "boleto": "볼레토",
+        "voucher": "바우처",
+        "debit_card": "체크카드",
+        "not_defined": "미정의",
+    }
+    labels = [label_map.get(t, t) for t in payment_type_dist["payment_type"]]
+
+    fig = go.Figure(
+        go.Pie(
+            labels=labels,
+            values=payment_type_dist["count"],
+            hole=0.45,
+            textinfo="percent+label",
+        )
+    )
+    fig.update_layout(
+        title="결제 수단 분포",
+        height=350,
+        margin=dict(t=60, b=20, l=20, r=20),
+        showlegend=False,
+    )
+    return fig
+
+
 def _empty_chart(message: str) -> go.Figure:
     """데이터 없을 때 빈 차트."""
     fig = go.Figure()
