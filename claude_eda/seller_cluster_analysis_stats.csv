@@ -1,0 +1,5 @@
+﻿cluster,total_orders,total_revenue,avg_price,product_variety,avg_review,low_review_pct,avg_delivery_days,late_delivery_pct,unique_customers,items_per_order,count,pct,total_rev_sum,rev_pct,label
+0,98.48,12160.65,135.37,36.27,4.05,15.9,11.86,6.43,98.48,1.13,322,10.8,3915728.42,50.4,Top Performer (우수판매자)
+1,4.04,741.68,155.31,2.83,2.11,70.28,12.39,4.27,4.04,1.37,373,12.6,276644.86,3.6,Low Review (저평가판매자)
+2,3.46,946.03,204.82,2.3,2.46,56.15,32.74,74.53,3.46,1.17,98,3.3,92710.75,1.2,Delivery Risk (배송위험)
+3,10.91,1596.43,151.37,5.69,4.35,8.2,10.48,3.9,10.91,1.13,2178,73.3,3477033.58,44.8,Standard (일반판매자)

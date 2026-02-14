@@ -1,0 +1,6 @@
+﻿cluster,product_weight_g,volume_cm3,avg_price,sales_count,avg_review_score,product_photos_qty,product_description_lenght,avg_freight,count,pct,label
+0,1316.67,10295.31,172.84,2.17,4.41,3.71,1258.58,19.52,6258,20.4,Premium (고가)
+1,1199.18,10157.24,90.23,15.8,4.04,2.1,707.55,17.12,1509,4.9,BestSeller (인기상품)
+2,892.49,8948.59,81.25,2.03,4.65,1.49,528.55,16.01,15003,48.8,Budget Good (가성비)
+3,1068.59,9976.09,96.13,1.76,1.96,1.68,586.43,17.07,5188,16.9,Low Review (저평가상품)
+4,9112.0,51378.89,252.05,2.43,4.0,2.06,750.13,35.48,2766,9.0,Heavy & Bulky (대형)
