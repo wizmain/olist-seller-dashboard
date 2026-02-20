@@ -17,6 +17,7 @@ from claude_eda.dashboard.data.loader import get_seller_list, load_seller_cluste
 from claude_eda.dashboard.data.preprocessor import compute_seller_metrics
 from claude_eda.dashboard.views.consulting import render_consulting
 from claude_eda.dashboard.views.dashboard import render_dashboard
+from claude_eda.dashboard.views.market_opportunity import render_market_opportunity
 from claude_eda.dashboard.utils.formatting import fmt_currency_short
 from claude_eda.dashboard.utils.korean import SELLER_CLUSTER_SHORT
 
@@ -35,7 +36,7 @@ with st.sidebar:
     # 페이지 라우팅 (맨 위)
     page = st.radio(
         "페이지",
-        ["현황 대시보드", "컨설팅 리포트"],
+        ["현황 대시보드", "컨설팅 리포트", "시장 기회 분석"],
         index=0,
     )
 
@@ -106,8 +107,10 @@ if selected_seller_id:
 
     if page == "현황 대시보드":
         render_dashboard(metrics)
-    else:
+    elif page == "컨설팅 리포트":
         render_consulting(metrics)
+    else:
+        render_market_opportunity(metrics)
 else:
     # 미선택 시 플랫폼 개요
     st.title(f"{APP_ICON} Olist 셀러 컨설팅 대시보드")

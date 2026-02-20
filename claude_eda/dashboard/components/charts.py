@@ -478,6 +478,207 @@ def payment_donut(payment_type_dist) -> go.Figure:
     return fig
 
 
+def supply_demand_chart(sd_df, seller_state: str = "") -> go.Figure:
+    """지역별 수급 불균형 수평 바 차트."""
+    if sd_df is None or sd_df.empty:
+        return _empty_chart("지역 데이터 없음")
+
+    top15 = sd_df.head(15).copy()
+    top15 = top15.sort_values("ratio", ascending=True)
+
+    grade_colors = {
+        "긴급 공급 부족": COLORS["danger"],
+        "진출 가능": COLORS["danger"],
+        "높은 기회": COLORS["warning"],
+        "중간 기회": COLORS["info"],
+        "포화": COLORS["muted"],
+    }
+    colors = [grade_colors.get(g, COLORS["primary"]) for g in top15["opportunity_grade"]]
+
+    # 셀러 위치 강조
+    labels = []
+    for _, r in top15.iterrows():
+        marker = " ★" if r["state"] == seller_state else ""
+        labels.append(f"{r['state']}{marker}")
+
+    fig = go.Figure(
+        go.Bar(
+            x=top15["ratio"],
+            y=labels,
+            orientation="h",
+            marker_color=colors,
+            text=[f"{r:.0f}:1 ({g})"
+                  for r, g in zip(top15["ratio"], top15["opportunity_grade"])],
+            textposition="outside",
+        )
+    )
+    fig.update_layout(
+        title="지역별 고객/셀러 수급 비율",
+        xaxis=dict(title="고객/셀러 비율"),
+        height=450,
+        margin=dict(t=60, b=40, l=50, r=120),
+    )
+    return fig
+
+
+def price_boxplot(price_stats_df, seller_prices: dict | None = None) -> go.Figure:
+    """카테고리별 가격 분포 박스플롯 (시장 vs 셀러)."""
+    if price_stats_df is None or price_stats_df.empty:
+        return _empty_chart("가격 데이터 없음")
+
+    top10 = price_stats_df.head(10)
+    categories = top10["category"].tolist()
+
+    fig = go.Figure()
+
+    # 시장 가격 범위 (P25-P75 박스)
+    for _, row in top10.iterrows():
+        cat = row["category"]
+        fig.add_trace(go.Box(
+            x=[cat],
+            lowerfence=[row["p25"]],
+            q1=[row["p25"]],
+            median=[row["median_price"]],
+            q3=[row["p75"]],
+            upperfence=[row["p75"]],
+            name="시장",
+            marker_color=COLORS["info"],
+            showlegend=False,
+        ))
+
+    # 셀러 가격 마커
+    if seller_prices:
+        seller_cats = []
+        seller_vals = []
+        for cat in categories:
+            if cat in seller_prices:
+                seller_cats.append(cat)
+                seller_vals.append(seller_prices[cat])
+        if seller_cats:
+            fig.add_trace(go.Scatter(
+                x=seller_cats,
+                y=seller_vals,
+                mode="markers",
+                name="내 평균가",
+                marker=dict(color=COLORS["warning"], size=12, symbol="diamond"),
+            ))
+
+    fig.update_layout(
+        title="카테고리별 가격 분포 (P25-P75) vs 내 가격",
+        yaxis=dict(title="가격 (R$)"),
+        height=400,
+        margin=dict(t=60, b=80),
+        showlegend=True,
+    )
+    fig.update_xaxes(tickangle=30)
+    return fig
+
+
+def regional_price_table(price_by_state_df) -> go.Figure:
+    """지역별 가격 비교 테이블."""
+    if price_by_state_df is None or price_by_state_df.empty:
+        return _empty_chart("지역별 가격 데이터 없음")
+
+    top10 = price_by_state_df.head(10)
+    fig = go.Figure(
+        go.Table(
+            header=dict(
+                values=["주(State)", "평균 가격(R$)", "중앙값(R$)", "주문 수"],
+                fill_color=COLORS["primary"],
+                font=dict(color="white", size=12),
+                align="center",
+            ),
+            cells=dict(
+                values=[
+                    top10["state"],
+                    [f"R${v:,.0f}" for v in top10["avg_price"]],
+                    [f"R${v:,.0f}" for v in top10["median_price"]],
+                    [f"{v:,}" for v in top10["orders"]],
+                ],
+                fill_color="white",
+                align="center",
+                font=dict(size=11),
+            ),
+        )
+    )
+    fig.update_layout(
+        title="지역별 가격 비교",
+        height=300,
+        margin=dict(t=60, b=20),
+    )
+    return fig
+
+
+def revenue_simulation_chart(simulation_data: list[dict]) -> go.Figure:
+    """가격대별 매출 시뮬레이션 바 차트."""
+    if not simulation_data:
+        return _empty_chart("시뮬레이션 데이터 없음")
+
+    labels = [d["label"] for d in simulation_data]
+    revenues = [d["estimated_monthly_revenue"] for d in simulation_data]
+    orders = [d["estimated_monthly_orders"] for d in simulation_data]
+    shares = [d["order_share"] for d in simulation_data]
+
+    bar_colors = [COLORS["info"], COLORS["success"], COLORS["warning"], COLORS["danger"]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=labels,
+        y=revenues,
+        marker_color=bar_colors[:len(labels)],
+        text=[f"R${r:,.0f}\n({o:.1f}건/월, {s:.0%})"
+              for r, o, s in zip(revenues, orders, shares)],
+        textposition="outside",
+    ))
+
+    fig.update_layout(
+        title="가격대별 예상 월 매출 시뮬레이션",
+        yaxis=dict(title="예상 월 매출 (R$)"),
+        height=350,
+        margin=dict(t=60, b=40),
+    )
+    return fig
+
+
+def category_opportunity_table(opp_df) -> go.Figure:
+    """미진출 카테고리 기회 테이블."""
+    if opp_df is None or opp_df.empty:
+        return _empty_chart("카테고리 기회 데이터 없음")
+
+    top8 = opp_df.head(8)
+    fig = go.Figure(
+        go.Table(
+            header=dict(
+                values=["카테고리", "시장 매출(R$)", "총 주문", "경쟁 셀러",
+                         "셀러당 주문", "평균가(R$)", "기회 점수"],
+                fill_color=COLORS["primary"],
+                font=dict(color="white", size=11),
+                align="center",
+            ),
+            cells=dict(
+                values=[
+                    top8["category"],
+                    [f"R${v:,.0f}" for v in top8["total_revenue"]],
+                    [f"{v:,}" for v in top8["total_orders"]],
+                    top8["total_sellers"],
+                    [f"{v:.0f}" for v in top8["orders_per_seller"]],
+                    [f"R${v:.0f}" for v in top8["avg_price"]],
+                    [f"{v:.1f}" for v in top8["opportunity_score"]],
+                ],
+                fill_color="white",
+                align="center",
+                font=dict(size=11),
+            ),
+        )
+    )
+    fig.update_layout(
+        title="미진출 고기회 카테고리",
+        height=300,
+        margin=dict(t=60, b=20),
+    )
+    return fig
+
+
 def _empty_chart(message: str) -> go.Figure:
     """데이터 없을 때 빈 차트."""
     fig = go.Figure()
