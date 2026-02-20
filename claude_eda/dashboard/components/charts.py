@@ -513,10 +513,10 @@ def supply_demand_chart(sd_df, seller_state: str = "") -> go.Figure:
         )
     )
     fig.update_layout(
-        title="지역별 고객/셀러 수급 비율",
+        title="전체 시장 수급 현황 (고객/셀러 비율)",
         xaxis=dict(title="고객/셀러 비율"),
-        height=450,
-        margin=dict(t=60, b=40, l=50, r=120),
+        height=420,
+        margin=dict(t=50, b=30, l=50, r=120),
     )
     return fig
 
