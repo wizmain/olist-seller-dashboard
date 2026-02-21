@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import plotly.graph_objects as go
 
-from claude_eda.dashboard.config import COLORS
+from claude_eda.dashboard.config import COLORS, STATE_CENTER_COORDS
 from claude_eda.dashboard.utils.formatting import health_grade_color
 from claude_eda.dashboard.utils.korean import (
     CUSTOMER_CLUSTER_LABELS,
@@ -675,6 +675,339 @@ def category_opportunity_table(opp_df) -> go.Figure:
         title="미진출 고기회 카테고리",
         height=300,
         margin=dict(t=60, b=20),
+    )
+    return fig
+
+
+def logistics_map(
+    seller_lat: float, seller_lng: float, seller_state: str,
+    customer_points, warehouse_recs,
+) -> go.Figure:
+    """셀러 + 고객 분포 + 창고 위치 지도 (Plotly scatter)."""
+    fig = go.Figure()
+
+    # 고객 분포
+    if customer_points is not None and not customer_points.empty:
+        fig.add_trace(go.Scattergeo(
+            lat=customer_points["lat"],
+            lon=customer_points["lng"],
+            marker=dict(
+                size=np.clip(customer_points["order_count"] * 2, 3, 20),
+                color=COLORS["info"],
+                opacity=0.4,
+                line=dict(width=0),
+            ),
+            name="고객",
+            hovertemplate="고객 %{text}<extra></extra>",
+            text=[f'{s} ({n}건)' for s, n in
+                  zip(customer_points["state"], customer_points["order_count"])],
+        ))
+
+    # 셀러 위치
+    if seller_lat is not None:
+        fig.add_trace(go.Scattergeo(
+            lat=[seller_lat], lon=[seller_lng],
+            marker=dict(size=16, color=COLORS["warning"], symbol="diamond",
+                        line=dict(width=2, color="black")),
+            name=f"셀러 ({seller_state})",
+            hovertemplate=f"셀러 위치 ({seller_state})<extra></extra>",
+        ))
+
+    # 창고 위치
+    priority_colors = {"1차 (즉시)": "#F44336", "2차 (6개월)": "#FF9800", "3차 (12개월)": "#4CAF50"}
+    if warehouse_recs is not None and not warehouse_recs.empty:
+        for _, row in warehouse_recs.iterrows():
+            color = priority_colors.get(row["priority"], "#999")
+            fig.add_trace(go.Scattergeo(
+                lat=[row["lat"]], lon=[row["lng"]],
+                marker=dict(size=14, color=color, symbol="star",
+                            line=dict(width=1.5, color="black")),
+                name=f"WH{int(row['warehouse_id'])}: {row['nearest_city']}",
+                hovertemplate=(
+                    f"WH{int(row['warehouse_id'])}: {row['nearest_city']}, {row['state']}<br>"
+                    f"우선순위: {row['priority']}<extra></extra>"
+                ),
+                showlegend=True,
+            ))
+
+    fig.update_geos(
+        scope="south america",
+        showland=True, landcolor="#f0f0f0",
+        showcoastlines=True, coastlinecolor="#ccc",
+        showcountries=True, countrycolor="#ccc",
+        showsubunits=True, subunitcolor="#ddd",
+        fitbounds="locations",
+        resolution=50,
+    )
+    fig.update_layout(
+        title="셀러 · 고객 · 추천 창고 위치",
+        height=500,
+        margin=dict(t=50, b=20, l=20, r=20),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5,
+                    font=dict(size=10)),
+    )
+    return fig
+
+
+def warehouse_ranking_bar(warehouse_recs) -> go.Figure:
+    """셀러에게 유리한 창고 순위 (고객→창고 평균 거리)."""
+    if warehouse_recs is None or warehouse_recs.empty:
+        return _empty_chart("창고 데이터 없음")
+
+    wh = warehouse_recs.sort_values("customer_to_wh_km")
+    priority_colors = {"1차 (즉시)": "#F44336", "2차 (6개월)": "#FF9800", "3차 (12개월)": "#4CAF50"}
+    colors = [priority_colors.get(p, "#999") for p in wh["priority"]]
+    labels = [f"WH{int(r['warehouse_id'])}: {r['nearest_city']}, {r['state']}" for _, r in wh.iterrows()]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=wh["customer_to_wh_km"],
+        y=labels,
+        orientation="h",
+        marker_color=colors,
+        text=[f"{d:.0f}km (↓{r:.0f}%)" for d, r in
+              zip(wh["customer_to_wh_km"], wh["reduction_pct"])],
+        textposition="outside",
+    ))
+    fig.update_layout(
+        title="창고별 고객 평균 거리 (낮을수록 유리)",
+        xaxis=dict(title="고객→창고 평균 거리 (km)"),
+        height=350,
+        margin=dict(t=50, b=40, l=180, r=80),
+    )
+    return fig
+
+
+def logistics_scenario_bar(simulation: list[dict]) -> go.Figure:
+    """시나리오별 평균 거리 비교 바 차트."""
+    if not simulation:
+        return _empty_chart("시뮬레이션 데이터 없음")
+
+    scenarios = [s["scenario"] for s in simulation]
+    distances = [s["avg_distance"] for s in simulation]
+    bar_colors = [COLORS["muted"], COLORS["primary"], COLORS["info"], COLORS["success"]]
+
+    fig = go.Figure(go.Bar(
+        x=scenarios,
+        y=distances,
+        marker_color=bar_colors[:len(scenarios)],
+        text=[f"{d:.0f}km" for d in distances],
+        textposition="outside",
+    ))
+
+    # 현재 대비 감소율 주석
+    if len(distances) > 1:
+        current = distances[0]
+        for i in range(1, len(distances)):
+            pct = (1 - distances[i] / current) * 100 if current > 0 else 0
+            fig.add_annotation(
+                x=scenarios[i], y=distances[i] + 15,
+                text=f"-{pct:.0f}%", showarrow=False,
+                font=dict(size=12, color=bar_colors[i], weight="bold"),
+            )
+
+    fig.update_layout(
+        title="시나리오별 평균 배송 거리",
+        yaxis=dict(title="평균 거리 (km)"),
+        height=400,
+        margin=dict(t=50, b=60),
+    )
+    return fig
+
+
+def logistics_savings_bar(simulation: list[dict]) -> go.Figure:
+    """시나리오별 운임/배송일 절감 비교."""
+    if not simulation or len(simulation) < 2:
+        return _empty_chart("시뮬레이션 데이터 없음")
+
+    current = simulation[0]
+    scenarios = [s["scenario"] for s in simulation[1:]]
+    freight_saves = [current["est_freight"] - s["est_freight"] for s in simulation[1:]]
+    days_saves = [current["est_days"] - s["est_days"] for s in simulation[1:]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=scenarios, y=freight_saves,
+        name="운임 절감 (R$)",
+        marker_color=COLORS["primary"],
+        text=[f"R${v:.1f}" for v in freight_saves],
+        textposition="outside",
+        yaxis="y",
+    ))
+    fig.add_trace(go.Bar(
+        x=scenarios, y=days_saves,
+        name="배송일 단축 (일)",
+        marker_color=COLORS["success"],
+        text=[f"{v:.1f}일" for v in days_saves],
+        textposition="outside",
+        yaxis="y2",
+    ))
+
+    fig.update_layout(
+        title="시나리오별 절감 효과 (운임 & 배송일)",
+        yaxis=dict(title="운임 절감 (R$)", side="left"),
+        yaxis2=dict(title="배송일 단축 (일)", side="right", overlaying="y"),
+        barmode="group",
+        legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center"),
+        height=400,
+        margin=dict(t=70, b=60),
+    )
+    return fig
+
+
+def region_effect_bar(region_effect) -> go.Figure:
+    """권역별 5개 창고 활용 시 거리 감소 효과."""
+    if region_effect is None or region_effect.empty:
+        return _empty_chart("권역별 데이터 없음")
+
+    re = region_effect.sort_values("reduction", ascending=True)
+    region_colors = {
+        "Southeast": "#2196F3", "South": "#4CAF50", "Northeast": "#FF5722",
+        "Central-West": "#FFC107", "North": "#9C27B0",
+    }
+    colors = [region_colors.get(r, "#999") for r in re["region"]]
+
+    fig = go.Figure(go.Bar(
+        x=re["reduction"],
+        y=re["region"],
+        orientation="h",
+        marker_color=colors,
+        text=[f"{d:.0f}km (↓{p:.0f}%) · {o}건" for d, p, o in
+              zip(re["reduction"], re["reduction_pct"], re["orders"])],
+        textposition="outside",
+    ))
+    fig.update_layout(
+        title="권역별 거리 감소 효과 (5개 창고)",
+        xaxis=dict(title="평균 거리 감소 (km)"),
+        height=350,
+        margin=dict(t=50, b=40, l=100, r=120),
+    )
+    return fig
+
+
+def delivery_inventory_map(
+    seller_lat: float | None,
+    seller_lng: float | None,
+    seller_state: str,
+    customer_points,
+    warehouse_df,
+    warehouse_inventory_summary: dict[str, dict],
+    regional_delivery_days: dict[str, float],
+) -> go.Figure:
+    """배송·재고 통합 지도 — 고객 분포 + 5개 창고(재고 hover) + 지역별 배송일 라벨."""
+    fig = go.Figure()
+
+    # 1) 고객 분포 (파란 원)
+    if customer_points is not None and not customer_points.empty:
+        fig.add_trace(go.Scattergeo(
+            lat=customer_points["lat"],
+            lon=customer_points["lng"],
+            marker=dict(
+                size=np.clip(customer_points["order_count"] * 2, 3, 20),
+                color=COLORS["info"],
+                opacity=0.4,
+                line=dict(width=0),
+            ),
+            name="고객",
+            hovertemplate="고객 %{text}<extra></extra>",
+            text=[f'{s} ({n}건)' for s, n in
+                  zip(customer_points["state"], customer_points["order_count"])],
+        ))
+
+    # 2) 셀러 위치 (다이아몬드)
+    if seller_lat is not None:
+        fig.add_trace(go.Scattergeo(
+            lat=[seller_lat], lon=[seller_lng],
+            marker=dict(size=16, color=COLORS["warning"], symbol="diamond",
+                        line=dict(width=2, color="black")),
+            name=f"셀러 ({seller_state})",
+            hovertemplate=f"셀러 위치 ({seller_state})<extra></extra>",
+        ))
+
+    # 3) 5개 창고 (별 마커 + 재고 요약 hover)
+    priority_colors = {
+        "Phase1": "#F44336", "Phase2": "#FF9800", "Phase3": "#4CAF50",
+        "1차 (즉시)": "#F44336", "2차 (6개월)": "#FF9800", "3차 (12개월)": "#4CAF50",
+    }
+    if warehouse_df is not None and not warehouse_df.empty:
+        for _, row in warehouse_df.iterrows():
+            wid = row["warehouse_id"]
+            color = priority_colors.get(
+                row.get("priority_phase", row.get("priority", "")), "#999"
+            )
+            inv_info = warehouse_inventory_summary.get(wid, {})
+            product_count = inv_info.get("product_count", 0)
+            available_qty = inv_info.get("available_qty", 0)
+            reorder_alerts = inv_info.get("reorder_alerts", 0)
+
+            hover_text = (
+                f"<b>{row.get('warehouse_name', wid)}</b><br>"
+                f"{row.get('warehouse_city', row.get('nearest_city', ''))}, "
+                f"{row.get('warehouse_state', row.get('state', ''))}<br>"
+                f"용량: {row.get('capacity_units', 0):,}개<br>"
+                f"───────────<br>"
+                f"상품 수: {product_count}종<br>"
+                f"가용 수량: {available_qty:,}개<br>"
+                f"발주 경고: {reorder_alerts}건"
+            )
+            fig.add_trace(go.Scattergeo(
+                lat=[row.get("warehouse_lat", row.get("lat", 0))],
+                lon=[row.get("warehouse_lng", row.get("lng", 0))],
+                marker=dict(size=14, color=color, symbol="star",
+                            line=dict(width=1.5, color="black")),
+                name=f"{wid}: {row.get('warehouse_name', '')}",
+                hovertemplate=hover_text + "<extra></extra>",
+                showlegend=True,
+            ))
+
+    # 4) 지역별 평균 배송일 텍스트 라벨
+    if regional_delivery_days:
+        label_lats = []
+        label_lons = []
+        label_texts = []
+        label_colors = []
+        for state_code, avg_days in regional_delivery_days.items():
+            coords = STATE_CENTER_COORDS.get(state_code)
+            if coords is None:
+                continue
+            label_lats.append(coords[0])
+            label_lons.append(coords[1])
+            label_texts.append(f"{state_code}<br><b>{avg_days:.0f}일</b>")
+            if avg_days <= 10:
+                label_colors.append("#2ca02c")
+            elif avg_days <= 20:
+                label_colors.append("#ff7f0e")
+            else:
+                label_colors.append("#d62728")
+
+        if label_texts:
+            fig.add_trace(go.Scattergeo(
+                lat=label_lats,
+                lon=label_lons,
+                mode="text",
+                text=label_texts,
+                textfont=dict(size=9, color=label_colors),
+                textposition="middle center",
+                name="배송 소요일",
+                hoverinfo="skip",
+                showlegend=True,
+            ))
+
+    fig.update_geos(
+        scope="south america",
+        showland=True, landcolor="#f0f0f0",
+        showcoastlines=True, coastlinecolor="#ccc",
+        showcountries=True, countrycolor="#ccc",
+        showsubunits=True, subunitcolor="#ddd",
+        fitbounds="locations",
+        resolution=50,
+    )
+    fig.update_layout(
+        title="물류·재고 지도 — 고객 · 창고 · 배송 소요일",
+        height=550,
+        margin=dict(t=50, b=20, l=20, r=20),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5,
+                    font=dict(size=10)),
     )
     return fig
 
