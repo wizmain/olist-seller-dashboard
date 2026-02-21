@@ -18,6 +18,8 @@ from claude_eda.dashboard.data.preprocessor import compute_seller_metrics
 from claude_eda.dashboard.views.consulting import render_consulting
 from claude_eda.dashboard.views.dashboard import render_dashboard
 from claude_eda.dashboard.views.market_opportunity import render_market_opportunity
+from claude_eda.dashboard.views.logistics_consulting import render_logistics_consulting
+from claude_eda.dashboard.views.delivery_inventory_consulting import render_delivery_inventory_consulting
 from claude_eda.dashboard.views.methodology import render_methodology
 from claude_eda.dashboard.utils.formatting import fmt_currency_short
 from claude_eda.dashboard.utils.korean import SELLER_CLUSTER_SHORT
@@ -37,7 +39,7 @@ with st.sidebar:
     # 페이지 라우팅 (맨 위)
     page = st.radio(
         "페이지",
-        ["현황 대시보드", "컨설팅 리포트", "시장 기회 분석", "분석 방법론"],
+        ["현황 대시보드", "컨설팅 리포트", "시장 기회 분석", "물류 최적화", "배송·재고 컨설팅", "분석 방법론"],
         index=0,
     )
 
@@ -113,6 +115,10 @@ elif selected_seller_id:
         render_dashboard(metrics)
     elif page == "컨설팅 리포트":
         render_consulting(metrics)
+    elif page == "물류 최적화":
+        render_logistics_consulting(metrics)
+    elif page == "배송·재고 컨설팅":
+        render_delivery_inventory_consulting(metrics)
     else:
         render_market_opportunity(metrics)
 else:
@@ -125,6 +131,8 @@ else:
         1. **왼쪽 사이드바**에서 셀러 ID를 입력하거나 상위 셀러를 선택하세요.
         2. **현황 대시보드**: 셀러의 핵심 KPI, 벤치마크 비교, 월별 추이를 확인합니다.
         3. **컨설팅 리포트**: 데이터 기반 맞춤형 컨설팅 조언과 성장 로드맵을 제공합니다.
+        4. **물류 최적화**: Olist 추천 창고를 활용한 배송 거리/운임/배송일 절감 시뮬레이션을 제공합니다.
+        5. **배송·재고 컨설팅**: 배송 지연 진단, 계절 리스크, 재고 현황 기반 맞춤 컨설팅을 제공합니다.
         """
     )
 

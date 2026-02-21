@@ -18,6 +18,9 @@ from claude_eda.dashboard.config import (
     SELLER_CLUSTER_DATA_PATH,
     SELLER_CLUSTER_STATS_PATH,
     SELLERS_PATH,
+    WAREHOUSE_RECOMMENDATIONS_PATH,
+    WAREHOUSE_SCENARIO_PATH,
+    WAREHOUSE_STATE_GAP_PATH,
 )
 
 
@@ -147,6 +150,21 @@ def build_merged_table() -> pd.DataFrame:
     merged["order_month"] = merged["order_purchase_timestamp"].dt.to_period("M")
 
     return merged
+
+
+@st.cache_data
+def load_warehouse_recommendations() -> pd.DataFrame:
+    return pd.read_csv(WAREHOUSE_RECOMMENDATIONS_PATH)
+
+
+@st.cache_data
+def load_warehouse_scenarios() -> pd.DataFrame:
+    return pd.read_csv(WAREHOUSE_SCENARIO_PATH)
+
+
+@st.cache_data
+def load_warehouse_state_gap() -> pd.DataFrame:
+    return pd.read_csv(WAREHOUSE_STATE_GAP_PATH)
 
 
 @st.cache_data

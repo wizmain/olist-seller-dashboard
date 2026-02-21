@@ -1,0 +1,6 @@
+warehouse_id,warehouse_name,warehouse_city,warehouse_state,warehouse_lat,warehouse_lng,capacity_units,region,priority_phase,operational_since
+WH_02,Campinas-SP Hub,campinas,SP,-23.047221,-47.074499,50000,Southeast,Phase1,2018-01-01
+WH_05,Guarani-MG Hub,guarani,MG,-21.320555,-43.116419,30000,Southeast,Phase1,2018-01-01
+WH_03,Vargem-SC Hub,vargem,SC,-27.370428,-51.007453,20000,South,Phase2,2018-07-01
+WH_01,Serrita-PE Hub,serrita,PE,-7.892911,-39.405425,15000,Northeast,Phase2,2018-07-01
+WH_04,Aruana-GO Hub,aruanã,GO,-14.943744,-51.09977,10000,Central-West,Phase3,2019-01-01
