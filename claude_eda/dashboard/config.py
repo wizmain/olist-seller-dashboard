@@ -25,6 +25,12 @@ PRODUCT_CLUSTER_DATA_PATH = CLUSTER_DIR / "product_cluster_analysis_data.csv"
 PRODUCT_CLUSTER_STATS_PATH = CLUSTER_DIR / "product_cluster_analysis_stats.csv"
 CUSTOMER_CLUSTER_DATA_PATH = CLUSTER_DIR / "customer_cluster_analysis_data.csv"
 
+# 셀러 회사명 매핑
+SELLER_NAME_MAPPING_PATH = PROJECT_ROOT / "olist-ecommerce" / "output" / "seller_id_company_name_mapping.csv"
+
+# 상품명 매핑
+PRODUCT_NAME_MAPPING_PATH = PROJECT_ROOT / "olist-ecommerce" / "output" / "product_id_name_mapping.csv"
+
 # 물류 창고 분석 결과 경로
 WAREHOUSE_RECOMMENDATIONS_PATH = CLUSTER_DIR / "warehouse_recommendations.csv"
 WAREHOUSE_SCENARIO_PATH = CLUSTER_DIR / "warehouse_scenario_comparison.csv"

@@ -18,6 +18,7 @@ from claude_eda.dashboard.data.inventory_loader import (
     load_warehouse_inventory,
     load_warehouses,
 )
+from claude_eda.dashboard.data.loader import load_product_names
 from claude_eda.dashboard.data.logistics_analyzer import compute_seller_logistics
 from claude_eda.dashboard.data.preprocessor import SellerMetrics
 from claude_eda.dashboard.engine.delivery_rules import (
@@ -37,7 +38,7 @@ def render_delivery_inventory_consulting(metrics: SellerMetrics) -> None:
             <h2 style="color: white; margin: 0 0 8px 0;">배송·재고 컨설팅</h2>
             <span style="color: rgba(255,255,255,0.85); font-size: 0.95em;">
                 셀러 <code style="background: rgba(255,255,255,0.2); color: white;
-                padding: 2px 6px; border-radius: 4px;">{metrics.seller_id[:12]}...</code>
+                padding: 2px 6px; border-radius: 4px;">{metrics.company_name or metrics.seller_id[:12]}</code>
                 &nbsp;&nbsp;|&nbsp;&nbsp;
                 지역: <b>{STATE_NAMES_KR.get(metrics.seller_state, metrics.seller_state)}</b>
                 &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -284,7 +285,14 @@ def _render_warehouse_inventory_detail(warehouse_id: str, summary: dict[str, dic
     with st.expander(f"재고 상세 ({len(wh_inv)}건)", expanded=False):
         display = wh_inv[["product_id", "quantity_on_hand", "quantity_reserved",
                           "quantity_available", "last_restock_date"]].copy()
-        display.columns = ["상품 ID", "보유 수량", "출고 예약", "가용 수량", "최근 입고일"]
+        pnames = load_product_names()[["product_id", "product_name_display"]]
+        display = display.merge(pnames, on="product_id", how="left")
+        display["product_name_display"] = display["product_name_display"].fillna(
+            display["product_id"].str[:12] + "..."
+        )
+        display = display[["product_name_display", "quantity_on_hand", "quantity_reserved",
+                           "quantity_available", "last_restock_date"]]
+        display.columns = ["상품명", "보유 수량", "출고 예약", "가용 수량", "최근 입고일"]
         st.dataframe(display.head(30), use_container_width=True, hide_index=True)
 
 
@@ -375,8 +383,18 @@ def _render_inventory_status(inv: dict) -> None:
             display_cols = ["product_id", "quantity_available", "reorder_point",
                             "safety_stock", "urgency"]
             display = alerts[[c for c in display_cols if c in alerts.columns]].copy()
+            if "product_id" in display.columns:
+                pnames = load_product_names()[["product_id", "product_name_display"]]
+                display = display.merge(pnames, on="product_id", how="left")
+                display["product_name_display"] = display["product_name_display"].fillna(
+                    display["product_id"].str[:12] + "..."
+                )
+                display = display.drop(columns=["product_id"])
+                # product_name_display를 첫 번째 컬럼으로 이동
+                cols = ["product_name_display"] + [c for c in display.columns if c != "product_name_display"]
+                display = display[cols]
             display.columns = [
-                c.replace("product_id", "상품 ID")
+                c.replace("product_name_display", "상품명")
                 .replace("quantity_available", "가용 수량")
                 .replace("reorder_point", "발주점")
                 .replace("safety_stock", "안전재고")

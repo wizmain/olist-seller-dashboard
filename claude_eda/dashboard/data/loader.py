@@ -13,10 +13,12 @@ from claude_eda.dashboard.config import (
     PAYMENTS_PATH,
     PRODUCT_CLUSTER_DATA_PATH,
     PRODUCT_CLUSTER_STATS_PATH,
+    PRODUCT_NAME_MAPPING_PATH,
     PRODUCTS_PATH,
     REVIEWS_PATH,
     SELLER_CLUSTER_DATA_PATH,
     SELLER_CLUSTER_STATS_PATH,
+    SELLER_NAME_MAPPING_PATH,
     SELLERS_PATH,
     WAREHOUSE_RECOMMENDATIONS_PATH,
     WAREHOUSE_SCENARIO_PATH,
@@ -83,6 +85,18 @@ def load_geolocation() -> pd.DataFrame:
         .agg({"geolocation_lat": "first", "geolocation_lng": "first"})
         .reset_index()
     )
+
+
+@st.cache_data
+def load_seller_names() -> pd.DataFrame:
+    """셀러 ID → 회사명 매핑 테이블 로딩."""
+    return pd.read_csv(SELLER_NAME_MAPPING_PATH)
+
+
+@st.cache_data
+def load_product_names() -> pd.DataFrame:
+    """상품 ID → 상품명 매핑 테이블 로딩."""
+    return pd.read_csv(PRODUCT_NAME_MAPPING_PATH)
 
 
 @st.cache_data
@@ -169,7 +183,7 @@ def load_warehouse_state_gap() -> pd.DataFrame:
 
 @st.cache_data
 def get_seller_list() -> pd.DataFrame:
-    """셀러 ID + 매출 순위 리스트 반환 (검색/선택용)."""
+    """셀러 ID + 매출 순위 + 회사명 리스트 반환 (검색/선택용)."""
     seller_clusters = load_seller_clusters()
     seller_list = (
         seller_clusters[["seller_id", "total_revenue", "total_orders", "cluster"]]
@@ -177,4 +191,10 @@ def get_seller_list() -> pd.DataFrame:
         .reset_index(drop=True)
     )
     seller_list["rank"] = range(1, len(seller_list) + 1)
+
+    # 회사명 매핑 merge
+    names = load_seller_names()[["seller_id", "company_name_en"]]
+    seller_list = seller_list.merge(names, on="seller_id", how="left")
+    seller_list["company_name_en"] = seller_list["company_name_en"].fillna("")
+
     return seller_list
