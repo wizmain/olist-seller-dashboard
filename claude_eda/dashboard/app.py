@@ -18,6 +18,7 @@ from claude_eda.dashboard.data.preprocessor import compute_seller_metrics
 from claude_eda.dashboard.views.consulting import render_consulting
 from claude_eda.dashboard.views.dashboard import render_dashboard
 from claude_eda.dashboard.views.market_opportunity import render_market_opportunity
+from claude_eda.dashboard.views.methodology import render_methodology
 from claude_eda.dashboard.utils.formatting import fmt_currency_short
 from claude_eda.dashboard.utils.korean import SELLER_CLUSTER_SHORT
 
@@ -36,7 +37,7 @@ with st.sidebar:
     # 페이지 라우팅 (맨 위)
     page = st.radio(
         "페이지",
-        ["현황 대시보드", "컨설팅 리포트", "시장 기회 분석"],
+        ["현황 대시보드", "컨설팅 리포트", "시장 기회 분석", "분석 방법론"],
         index=0,
     )
 
@@ -90,7 +91,10 @@ with st.sidebar:
     st.caption("데이터 기반 규칙 엔진으로 맞춤형 조언 제공")
 
 # --- 메인 콘텐츠 ---
-if selected_seller_id:
+# 방법론 페이지는 셀러 선택 없이도 접근 가능
+if page == "분석 방법론":
+    render_methodology()
+elif selected_seller_id:
     # 셀러 존재 확인
     all_sellers = load_seller_clusters()
     if selected_seller_id not in all_sellers["seller_id"].values:
