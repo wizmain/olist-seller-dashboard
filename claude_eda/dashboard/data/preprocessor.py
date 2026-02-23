@@ -19,6 +19,7 @@ from claude_eda.dashboard.data.loader import (
     load_reviews,
     load_seller_cluster_stats,
     load_seller_clusters,
+    load_seller_names,
     load_sellers,
 )
 from claude_eda.dashboard.engine.review_analyzer import analyze_seller_reviews
@@ -29,6 +30,7 @@ class SellerMetrics:
     """특정 셀러의 전체 메트릭."""
 
     seller_id: str
+    company_name: str = ""
 
     # 프로필
     seller_state: str = ""
@@ -113,6 +115,12 @@ def compute_seller_metrics(seller_id: str) -> SellerMetrics | None:
         return None
 
     m = SellerMetrics(seller_id=seller_id)
+
+    # 회사명 매핑
+    names_df = load_seller_names()
+    name_row = names_df[names_df["seller_id"] == seller_id]
+    if not name_row.empty:
+        m.company_name = str(name_row.iloc[0]["company_name_en"])
 
     # --- 프로필 ---
     sellers_df = load_sellers()

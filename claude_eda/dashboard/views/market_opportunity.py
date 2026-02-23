@@ -36,7 +36,7 @@ def render_market_opportunity(metrics: SellerMetrics) -> None:
             <h2 style="color: white; margin: 0 0 8px 0;">시장 기회 분석</h2>
             <span style="color: rgba(255,255,255,0.85); font-size: 0.95em;">
                 셀러 <code style="background: rgba(255,255,255,0.2); color: white;
-                padding: 2px 6px; border-radius: 4px;">{metrics.seller_id[:12]}...</code>
+                padding: 2px 6px; border-radius: 4px;">{metrics.company_name or metrics.seller_id[:12]}</code>
                 &nbsp;&nbsp;|&nbsp;&nbsp;
                 지역: <b>{STATE_NAMES_KR.get(metrics.seller_state, metrics.seller_state)}</b>
                 &nbsp;&nbsp;|&nbsp;&nbsp;

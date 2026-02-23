@@ -63,8 +63,9 @@ with st.sidebar:
     # 라벨 매핑 딕셔너리 (한 번만 생성)
     _label_cache = {}
     for _, r in top50.iterrows():
+        name = r.get("company_name_en", "") or r["seller_id"][:12]
         _label_cache[r["seller_id"]] = (
-            f"#{int(r['rank'])} | {r['seller_id'][:12]}... | "
+            f"#{int(r['rank'])} | {name} | "
             f"{fmt_currency_short(r['total_revenue'])} | "
             f"{SELLER_CLUSTER_SHORT.get(int(r['cluster']), '?')}"
         )
@@ -165,11 +166,11 @@ else:
     st.markdown("---")
     st.markdown(
         """
-        ### 테스트 셀러 ID
-        | 유형 | 셀러 ID |
-        |------|---------|
-        | Top Performer (200주문, R$25K) | `001cca7ae9ae17fb1caed9dfb1094831` |
-        | Standard (3주문, R$2.7K) | `0015a82c2db000af6aaaf3ae2ecb0532` |
-        | Low Review (1주문, 리뷰 1.0) | `001e6ad469a905060d959994f1b41e4f` |
+        ### 테스트 셀러
+        | 유형 | 회사명 | 셀러 ID |
+        |------|--------|---------|
+        | Top Performer (200주문, R$25K) | Crown Source | `001cca7ae9ae17fb1caed9dfb1094831` |
+        | Standard (3주문, R$2.7K) | Central Flow | `0015a82c2db000af6aaaf3ae2ecb0532` |
+        | Low Review (1주문, 리뷰 1.0) | Prime Trade | `001e6ad469a905060d959994f1b41e4f` |
         """
     )

@@ -61,7 +61,8 @@ def render_dashboard(metrics: SellerMetrics) -> None:
         )
         state_kr = STATE_NAMES_KR.get(metrics.seller_state, metrics.seller_state)
 
-        st.markdown(f"### 셀러 `{metrics.seller_id[:12]}...`")
+        display_name = metrics.company_name or metrics.seller_id[:12]
+        st.markdown(f"### {display_name}")
         st.markdown(
             f"**클러스터:** {cluster_label} &nbsp;|&nbsp; "
             f"**지역:** {state_kr} ({metrics.seller_state}) &nbsp;|&nbsp; "
